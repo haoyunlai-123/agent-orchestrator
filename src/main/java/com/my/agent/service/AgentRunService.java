@@ -56,6 +56,11 @@ public class AgentRunService {
         if (context.getStatus() == RunStatus.SUCCESS) {
             return "执行成功，共完成 " + context.getStepResults().size() + " 个步骤";
         }
-        return "执行失败";
+
+        return context.getStepResults().stream()
+                .filter(step -> step.getStatus().name().equals("FAILED"))
+                .findFirst()
+                .map(step -> "执行失败，失败步骤=" + step.getStepId() + "，原因=" + step.getMessage())
+                .orElse("执行失败");
     }
 }

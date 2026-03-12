@@ -1,13 +1,13 @@
 package com.my.agent.tool.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.my.agent.config.SchedulerGatewayProperties;
-import com.my.agent.model.request.CreateJobCommand;
+import com.my.agent.tool.client.dto.SchedulerApiResponse;
+import com.my.agent.tool.client.dto.TriggerOnceResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.*;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -16,79 +16,86 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SchedulerGatewayClient {
 
-    private final RestClient restClient;
+    private final RestTemplate restTemplate;
     private final SchedulerGatewayProperties properties;
-    private final ObjectMapper objectMapper;
 
     public Map<String, Object> createJob(Map<String, Object> params) {
-        try {
-            CreateJobCommand command = CreateJobCommand.builder()
-                    .name(String.valueOf(params.getOrDefault("name", "agent-http-job")))
-                    .scheduleType(String.valueOf(params.getOrDefault("scheduleType", "FIXED_RATE")))
-                    .scheduleExpr(String.valueOf(params.getOrDefault("scheduleExpr", "5000")))
-                    .handlerType(String.valueOf(params.getOrDefault("handlerType", "HTTP")))
-                    .handlerParam(String.valueOf(params.get("handlerParam")))
-                    .routeStrategy(String.valueOf(params.getOrDefault("routeStrategy", "ROUND_ROBIN")))
-                    .retryMax(Integer.parseInt(String.valueOf(params.getOrDefault("retryMax", 1))))
-                    .timeoutMs(Integer.parseInt(String.valueOf(params.getOrDefault("timeoutMs", 3000))))
-                    .enabled(Boolean.parseBoolean(String.valueOf(params.getOrDefault("enabled", false))))
-                    .build();
+        String url = properties.getBaseUrl() + "/api/jobs";
 
-            String raw = restClient.post()
-                    .uri(properties.getBaseUrl() + "/api/jobs")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(command)
-                    .retrieve()
-                    .body(String.class);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
 
-            JsonNode root = objectMapper.readTree(raw);
-            JsonNode data = root.has("data") ? root.get("data") : root;
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(params, headers);
 
-            Long jobId = null;
-            if (data.has("jobId")) {
-                jobId = data.get("jobId").asLong();
-            } else if (data.has("id")) {
-                jobId = data.get("id").asLong();
-            }
+        ResponseEntity<SchedulerApiResponse<Object>> response = restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                entity,
+                new ParameterizedTypeReference<>() {}
+        );
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("jobId", jobId);
-            result.put("rawResponse", raw);
-            return result;
-        } catch (Exception e) {
-            throw new RuntimeException("调用创建任务接口失败: " + e.getMessage(), e);
+        SchedulerApiResponse<Object> body = response.getBody();
+        if (body == null) {
+            throw new IllegalStateException("createJob 响应为空");
         }
+        if (body.getCode() == null || body.getCode() != 0) {
+            throw new IllegalStateException("createJob 失败: " + body.getMsg());
+        }
+
+        Object data = body.getData();
+        if (data == null) {
+            throw new IllegalStateException("createJob 成功但 data 为空");
+        }
+
+        Long jobId = Long.valueOf(data.toString());
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("jobId", jobId);
+        result.put("rawData", data);
+        result.put("rawMsg", body.getMsg());
+        return result;
     }
 
     public Map<String, Object> triggerJob(Long jobId) {
-        try {
-            String raw = restClient.post()
-                    .uri(properties.getBaseUrl() + "/api/jobs/{jobId}/trigger", jobId)
-                    .retrieve()
-                    .body(String.class);
+        String url = properties.getBaseUrl() + "/api/jobs/" + jobId + "/trigger";
 
-            JsonNode root = objectMapper.readTree(raw);
-            JsonNode data = root.has("data") ? root.get("data") : root;
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
 
-            Long instanceId = null;
-            if (data.has("instanceId")) {
-                instanceId = data.get("instanceId").asLong();
-            } else if (data.has("id")) {
-                instanceId = data.get("id").asLong();
-            }
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("jobId", jobId);
-            result.put("instanceId", instanceId);
-            result.put("rawResponse", raw);
-            return result;
-        } catch (Exception e) {
-            throw new RuntimeException("调用触发任务接口失败: " + e.getMessage(), e);
+        ResponseEntity<SchedulerApiResponse<TriggerOnceResponse>> response = restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                entity,
+                new ParameterizedTypeReference<>() {}
+        );
+
+        SchedulerApiResponse<TriggerOnceResponse> body = response.getBody();
+        if (body == null) {
+            throw new IllegalStateException("triggerJob 响应为空");
         }
+        if (body.getCode() == null || body.getCode() != 0) {
+            throw new IllegalStateException("triggerJob 失败: " + body.getMsg());
+        }
+        if (body.getData() == null) {
+            throw new IllegalStateException("triggerJob 成功但 data 为空");
+        }
+
+        TriggerOnceResponse data = body.getData();
+        if (data.getInstanceId() == null) {
+            throw new IllegalStateException("triggerJob 成功但 instanceId 为空");
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("instanceId", data.getInstanceId());
+        result.put("result", data.isResult());
+        result.put("jobId", jobId);
+        return result;
     }
 
     public Map<String, Object> queryInstanceStatus(Long instanceId) {
-        // 这里先占位，等给出真实实例查询接口后再精确改
+        // 占位实现：后续替换成真实接口
         Map<String, Object> result = new HashMap<>();
         result.put("instanceId", instanceId);
         result.put("status", "SUCCESS");
@@ -96,9 +103,10 @@ public class SchedulerGatewayClient {
     }
 
     public Map<String, Object> queryInstanceResult(Long instanceId) {
+        // 占位实现：后续替换成真实接口
         Map<String, Object> result = new HashMap<>();
         result.put("instanceId", instanceId);
-        result.put("result", "等待你补充真实任务结果查询接口");
+        result.put("result", "等待接入真实任务结果查询接口");
         return result;
     }
 }

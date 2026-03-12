@@ -23,6 +23,12 @@ public class CreateJobTool implements AgentTool {
     @Override
     public ToolResult execute(Map<String, Object> params, ToolContext context) {
         Map<String, Object> result = schedulerGatewayClient.createJob(params);
+
+        Object jobId = result.get("jobId");
+        if (jobId == null) {
+            return ToolResult.fail("任务创建成功，但未解析到 jobId");
+        }
+
         return ToolResult.success("任务创建成功", result);
     }
 }

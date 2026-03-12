@@ -17,4 +17,4 @@ llm:
   model: deepseek-chat
   connect-timeout-ms: 5000
   read-timeout-ms: 60000
-  api-key: ${DEEPSEEK_API_KEY}
+  api-key: ${DEEPSEEK_API_KEY:}
