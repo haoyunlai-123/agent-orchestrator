@@ -7,6 +7,14 @@ spring:
 
 scheduler:
   gateway:
-    base-url: http://localhost:8080
+    base-url: http://127.0.0.1:9001
     connect-timeout-ms: 3000
     read-timeout-ms: 5000
+
+llm:
+  provider: deepseek
+  base-url: https://api.deepseek.com
+  model: deepseek-chat
+  connect-timeout-ms: 5000
+  read-timeout-ms: 60000
+  api-key: ${DEEPSEEK_API_KEY}
